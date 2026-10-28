@@ -1,0 +1,11 @@
+! Title: Kalkan ek filtreleri
+! Description: EasyList / AdGuard listelerinde olmayan, Kalkan'a özel kurallar.
+!              Bu dosya değişince yeni kurallar ertesi gün tüm kullanıcılara ulaşır (uygulama güncellemesi gerekmez).
+! Sözdizimi: Adblock Plus / AdGuard. Scriptlet: alanadi#%#//scriptlet('ad', 'arg1', ...)
+!
+! --- Dizi/film sitelerinin kendi barındırdığı ön reklam videoları ve bahis yönlendiricileri
+||marmorated.pics^
+||gir.gg^
+||cdnhipter.xyz/f/fv/$image
+! --- YouTube: oynatıcı verisindeki reklam alanları (uygulamadaki yerleşik korumaya ek olarak)
+youtube.com,youtube-nocookie.com#%#//scriptlet('json-prune', 'playerResponse.adPlacements playerResponse.playerAds playerResponse.adSlots adPlacements playerAds adSlots')
