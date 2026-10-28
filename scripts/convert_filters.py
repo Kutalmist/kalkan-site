@@ -27,15 +27,38 @@ import urllib.request
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # (id, kaynak, kategori, uygulamaya gömülsün mü, engelleme kuralları alınsın mı)
+# Herkese inen ortak listeler:
 LISTS = [
     ("kalkan", os.path.join(HERE, "..", "filters", "kalkan.txt"), "ads", True, True),
     ("easylist", "https://easylist.to/easylist/easylist.txt", "ads", True, True),
-    ("adguard-turkish", "https://filters.adtidy.org/ios/filters/13_optimized.txt", "ads", False, True),
     ("adguard-mobile", "https://filters.adtidy.org/ios/filters/11_optimized.txt", "ads", False, True),
     ("easyprivacy", "https://easylist.to/easylist/easyprivacy.txt", "trackers", True, True),
+    # Çerez/GDPR onay pencereleri (Ayarlar'daki "Çerez/bildirim pencerelerini gizle" ile açılır)
+    ("cookies", "https://filters.adtidy.org/ios/filters/18_optimized.txt", "annoyances", False, True),
     # AdGuard Base'in engelleme kuralları büyük ölçüde EasyList ile aynı (ve 150 bin sınırını aşar);
     # yalnızca scriptlet kurallarını alıyoruz.
     ("adguard-base", "https://filters.adtidy.org/ios/filters/2_optimized.txt", "ads", False, False),
+]
+
+# Bölge paketleri: uygulama telefonun bölgesine göre (ya da kullanıcının seçtiklerini) indirir.
+# (kod, Türkçe ad, kaynak, ülke kodları)
+REGIONS = [
+    ("tr", "Türkiye", "https://filters.adtidy.org/ios/filters/13_optimized.txt", ["TR", "CY", "AZ"]),
+    ("de", "Almanca", "https://filters.adtidy.org/ios/filters/6_optimized.txt", ["DE", "AT", "CH", "LI", "LU"]),
+    ("fr", "Fransızca", "https://filters.adtidy.org/ios/filters/16_optimized.txt", ["FR", "BE", "MC", "SN", "CI"]),
+    ("es", "İspanyolca ve Portekizce", "https://filters.adtidy.org/ios/filters/9_optimized.txt",
+     ["ES", "PT", "BR", "MX", "AR", "CO", "CL", "PE", "VE", "EC", "UY", "PY", "BO", "CR", "PA", "DO", "GT", "HN",
+      "NI", "SV", "PR", "CU", "AO", "MZ"]),
+    ("it", "İtalyanca", "https://easylist-downloads.adblockplus.org/easylistitaly.txt", ["IT", "SM", "VA"]),
+    ("nl", "Felemenkçe", "https://filters.adtidy.org/ios/filters/8_optimized.txt", ["NL", "BE", "SR"]),
+    ("pl", "Lehçe", "https://easylist-downloads.adblockplus.org/easylistpolish.txt", ["PL"]),
+    ("ru", "Rusça", "https://filters.adtidy.org/ios/filters/1_optimized.txt", ["RU", "BY", "KZ", "KG"]),
+    ("ua", "Ukraynaca", "https://filters.adtidy.org/ios/filters/23_optimized.txt", ["UA"]),
+    ("ar", "Arapça", "https://easylist-downloads.adblockplus.org/Liste_AR.txt",
+     ["SA", "AE", "EG", "QA", "KW", "BH", "OM", "JO", "LB", "IQ", "SY", "YE", "LY", "TN", "DZ", "MA", "SD", "PS"]),
+    ("ja", "Japonca", "https://filters.adtidy.org/ios/filters/7_optimized.txt", ["JP"]),
+    ("zh", "Çince", "https://filters.adtidy.org/ios/filters/224_optimized.txt", ["CN", "TW", "HK", "MO", "SG"]),
+    ("id", "Endonezce", "https://raw.githubusercontent.com/ABPindo/indonesianadblockrules/master/subscriptions/abpindo.txt", ["ID"]),
 ]
 SAFARI_RULE_LIMIT = 150_000
 
@@ -263,7 +286,7 @@ def main():
     bundled_only = "--bundled-only" in sys.argv
     os.makedirs(out, exist_ok=True)
     manifest = {"version": int(time.time()), "files": []}
-    all_scriptlets = {"add": [], "exc": []}
+    all_scriptlets = {"add": [], "exc": []}  # add: (paket, kural)
     total = 0
     for list_id, src, category, bundled, take_network in LISTS:
         if bundled_only and not bundled:
@@ -271,21 +294,39 @@ def main():
         text = read_source(src)
         version = next((l.split(":", 1)[1].strip() for l in text.splitlines()[:30] if l.startswith("! Version")), "-")
         rules, scriptlets = convert(text, take_network)
+        pack = "cookies" if list_id == "cookies" else "common"
         for kind, rule in scriptlets:
-            all_scriptlets[kind].append(rule)
+            all_scriptlets[kind].append((pack, rule) if kind == "add" else rule)
         if take_network:
             sha, size = write_json(os.path.join(out, f"{list_id}.json"), rules)
-            manifest["files"].append({"id": list_id, "category": category, "file": f"{list_id}.json",
+            manifest["files"].append({"id": list_id, "category": category, "file": f"{list_id}.json", "region": "common",
                                       "sha256": sha, "bytes": size, "rules": len(rules), "source_version": version})
             total += len(rules)
         print(f"{list_id:16} {version:22} kural={len(rules) if take_network else '-':>6}  scriptlet={len(scriptlets)}")
+
+    largest_region = 0
+    if not bundled_only:
+        manifest["regions"] = []
+        for code, name, src, countries in REGIONS:
+            text = read_source(src)
+            version = next((l.split(":", 1)[1].strip() for l in text.splitlines()[:30] if l.startswith("! Version")), "-")
+            rules, scriptlets = convert(text, True)
+            for kind, rule in scriptlets:
+                all_scriptlets[kind].append((code, rule) if kind == "add" else rule)
+            file = f"region-{code}.json"
+            sha, size = write_json(os.path.join(out, file), rules)
+            manifest["files"].append({"id": f"region-{code}", "category": "ads", "file": file, "region": code,
+                                      "sha256": sha, "bytes": size, "rules": len(rules), "source_version": version})
+            manifest["regions"].append({"code": code, "name": name, "countries": countries, "rules": len(rules)})
+            largest_region = max(largest_region, len(rules))
+            print(f"region-{code:9} {version:22} kural={len(rules):>6}  scriptlet={len(scriptlets)}")
 
     # İstisnaları uygula: aynı ad+argüman için istisna olan alan adlarını kuraldan çıkar
     exc_index = {}
     for e in all_scriptlets["exc"]:
         exc_index.setdefault((e["n"], tuple(e["a"])), set()).update(e.get("d", ["*"]))
-    final = []
-    for r in all_scriptlets["add"]:
+    packs = {}
+    for pack, r in all_scriptlets["add"]:
         blocked = exc_index.get((r["n"], tuple(r["a"])), set())
         if "*" in blocked:
             continue
@@ -295,15 +336,25 @@ def main():
                 continue
         elif blocked:
             r["x"] = sorted(set(r.get("x", [])) | blocked)
-        final.append(r)
-    sha, size = write_json(os.path.join(out, "scriptlets.json"), final)
+        packs.setdefault(pack, []).append(r)
+    final_count = sum(len(v) for v in packs.values())
+    if bundled_only:
+        # Uygulamaya gömülü yedek: yalnızca gömülü listelerin scriptlet'leri
+        write_json(os.path.join(out, "scriptlets.json"), packs.get("common", []))
+    else:
+        for pack, rules in sorted(packs.items()):
+            name = "scriptlets.json" if pack == "common" else f"scriptlets-{pack}.json"
+            sha, size = write_json(os.path.join(out, name), rules)
+            manifest["files"].append({"id": name[:-5], "category": "annoyances-scriptlets" if pack == "cookies" else "scriptlets",
+                                      "file": name, "region": "common" if pack in ("common", "cookies") else pack,
+                                      "sha256": sha, "bytes": size, "rules": len(rules)})
+            print(f"{name:26} scriptlet={len(rules):>5}  {size // 1024} KB")
+    manifest["common_rules"] = total
     if not bundled_only:
-        manifest["files"].append({"id": "scriptlets", "category": "scriptlets", "file": "scriptlets.json",
-                                  "sha256": sha, "bytes": size, "rules": len(final)})
         write_json(os.path.join(out, "manifest.json"), manifest)
-    print(f"toplam içerik kuralı: {total} (Safari sınırı {SAFARI_RULE_LIMIT}) | scriptlet: {len(final)}")
-    if total > SAFARI_RULE_LIMIT:
-        sys.exit("HATA: Safari içerik engelleyici sınırı aşıldı")
+    print(f"ortak içerik kuralı: {total} + en büyük bölge {largest_region} (Safari sınırı {SAFARI_RULE_LIMIT}) | scriptlet: {final_count}")
+    if total + largest_region > SAFARI_RULE_LIMIT:
+        sys.exit("HATA: ortak liste + en büyük bölge Safari sınırını aşıyor")
 
 
 if __name__ == "__main__":
