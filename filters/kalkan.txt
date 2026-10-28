@@ -9,3 +9,5 @@
 ||cdnhipter.xyz/f/fv/$image
 ! --- YouTube: oynatıcı verisindeki reklam alanları (uygulamadaki yerleşik korumaya ek olarak)
 youtube.com,youtube-nocookie.com#%#//scriptlet('json-prune', 'playerResponse.adPlacements playerResponse.playerAds playerResponse.adSlots adPlacements playerAds adSlots')
+! --- Uçtan uca test kuralı (yalnızca localtest.me = 127.0.0.1)
+scriptlet-test.localtest.me#%#//scriptlet('set-constant', 'adsEnabled', 'false')

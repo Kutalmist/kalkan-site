@@ -296,8 +296,8 @@ def main():
         elif blocked:
             r["x"] = sorted(set(r.get("x", [])) | blocked)
         final.append(r)
+    sha, size = write_json(os.path.join(out, "scriptlets.json"), final)
     if not bundled_only:
-        sha, size = write_json(os.path.join(out, "scriptlets.json"), final)
         manifest["files"].append({"id": "scriptlets", "category": "scriptlets", "file": "scriptlets.json",
                                   "sha256": sha, "bytes": size, "rules": len(final)})
         write_json(os.path.join(out, "manifest.json"), manifest)
